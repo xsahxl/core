@@ -1,4 +1,5 @@
 import fs from 'fs-extra';
+import os from 'os';
 import https from 'https';
 import http from 'http';
 import spinner, { Ora } from './spinner';
@@ -111,7 +112,8 @@ export default async (url: string, dest: string, options: IOptions = {}) => {
               execa.sync('unzip', ['-d', dest, '-o', filePath]);
             }
           } else {
-            await decompress(filePath, dest, restOpts);
+            const { success, error } = await doDecompress(filePath, dest, restOpts);
+            if (!success) throw error;
           }
           clearInterval(timer);
           await fs.unlink(filePath);
@@ -138,5 +140,18 @@ export default async (url: string, dest: string, options: IOptions = {}) => {
       errorStack: error.stack,
     });
     throw error;
+  }
+};
+
+const doDecompress = async (filePath: string, dest: string, restOpts: DecompressOptions) => {
+  try {
+    await decompress(filePath, dest, restOpts);
+    return { success: true };
+  } catch (error) {
+    // 兼容windows下解压 软连接文件 失败的问题
+    if (os.platform() === 'win32' && error.code === 'ENOENT' && error.syscall === 'link') {
+      return { success: true };
+    }
+    return { success: false, error };
   }
 };
